@@ -1,0 +1,12 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "052d41b8e016640380d92c95a2723fd9f1e255fb",
+  "prompts": {},
+  "humans": {
+    "h_9440633a297247": {
+      "author": "Sachin Lubana <sachin.lubana@deliveryhero.com>"
+    }
+  }
+}
