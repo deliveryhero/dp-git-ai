@@ -1,0 +1,36 @@
+tests/integration/diff_comprehensive.rs
+  s_a1291eaabe894a::t_41d7d659d053e8 107-139
+  s_a1291eaabe894a::t_b912381552894e 106
+src/commands/git_ai_handlers.rs
+  s_a1291eaabe894a::t_b18c099e1340c6 348-350
+tests/integration/diff.rs
+  s_a1291eaabe894a::t_0b8cb01044fc12 1119-1157,1162-1204,1206-1218
+  s_a1291eaabe894a::t_4e4369b1d85f9c 1158-1161,1205
+src/commands/diff.rs
+  s_a1291eaabe894a::t_593a97721f1048 1750
+  s_a1291eaabe894a::t_15bafb903d76ea 54,65
+  s_a1291eaabe894a::t_4e4369b1d85f9c 288-290
+  s_a1291eaabe894a::t_d96bb6c71c0e8e 411
+  s_a1291eaabe894a::t_4f11e3656c77cf 1759,1763-1766,1768-1789
+  s_a1291eaabe894a::t_a02a0a8db3d86b 258-261
+  s_a1291eaabe894a::t_6dfa1137c9780f 86-88
+  s_a1291eaabe894a::t_9fd6aac4dd34c0 287,291
+  s_a1291eaabe894a::t_22d7b897a30b3a 2205
+  s_a1291eaabe894a::t_f07b5495c7053b 2400-2451
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3864819affa6e32d241c8e347fbdc191234d41c2",
+  "prompts": {},
+  "sessions": {
+    "s_a1291eaabe894a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "471d929f-9cce-4968-a6f8-791731335097",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Sachin Lubana <sachin.lubana@deliveryhero.com>"
+    }
+  }
+}
