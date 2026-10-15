@@ -51,6 +51,7 @@ pub struct DiffCommandOptions {
     pub blame_deletions_since: Option<String>,
     pub include_stats: bool,
     pub all_prompts: bool,
+    pub no_files: bool,
 }
 
 impl Default for DiffCommandOptions {
@@ -61,6 +62,7 @@ impl Default for DiffCommandOptions {
             blame_deletions_since: None,
             include_stats: false,
             all_prompts: false,
+            no_files: false,
         }
     }
 }
@@ -81,7 +83,9 @@ pub struct DiffLineKey {
 /// JSON output format for git-ai diff --json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiffJson {
-    /// Per-file diff information with annotations
+    /// Per-file diff information with annotations.
+    /// Omitted entirely when `--no-files` skips its generation.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub files: BTreeMap<String, FileDiffJson>,
     /// Prompt records keyed by prompt hash (old-format, bare 16-char hex)
     pub prompts: BTreeMap<String, PromptRecord>,
@@ -251,6 +255,10 @@ pub fn parse_diff_args(args: &[String]) -> Result<ParsedDiffArgs, GitAiError> {
                 options.all_prompts = true;
                 i += 1;
             }
+            "--no-files" => {
+                options.no_files = true;
+                i += 1;
+            }
             arg if arg.starts_with("--") => {
                 return Err(GitAiError::Generic(format!("Unknown option: {}", arg)));
             }
@@ -274,6 +282,11 @@ pub fn parse_diff_args(args: &[String]) -> Result<ParsedDiffArgs, GitAiError> {
     if options.all_prompts && !matches!(options.format, DiffFormat::Json) {
         return Err(GitAiError::Generic(
             "--all-prompts requires --json".to_string(),
+        ));
+    }
+    if options.no_files && !matches!(options.format, DiffFormat::Json) {
+        return Err(GitAiError::Generic(
+            "--no-files requires --json".to_string(),
         ));
     }
 
@@ -395,6 +408,7 @@ pub fn execute_diff(repo: &Repository, parsed: ParsedDiffArgs) -> Result<String,
                 &output_prompts,
                 &output_sessions,
                 commit_stats,
+                parsed.options.no_files,
             )?;
             serde_json::to_string(&diff_json)
                 .map_err(|e| GitAiError::Generic(format!("Failed to serialize JSON: {}", e)))?
@@ -1733,6 +1747,7 @@ fn calculate_diff_commit_stats(
 // ============================================================================
 
 /// Build the DiffJson structure for --json output
+#[allow(clippy::too_many_arguments)]
 fn build_diff_json(
     repo: &Repository,
     from_commit: &str,
@@ -1741,33 +1756,37 @@ fn build_diff_json(
     prompts: &BTreeMap<String, PromptRecord>,
     sessions: &BTreeMap<String, SessionRecord>,
     commit_stats: Option<DiffCommitStats>,
+    no_files: bool,
 ) -> Result<DiffJson, GitAiError> {
     let mut files: BTreeMap<String, FileDiffJson> = BTreeMap::new();
-    let file_diffs = get_diff_split_by_file(repo, from_commit, to_commit)?;
-    let mut files_sorted: Vec<&String> = artifacts.included_files.iter().collect();
-    files_sorted.sort();
 
-    for file_path in files_sorted {
-        let diff = file_diffs.get(file_path).cloned().unwrap_or_default();
+    if !no_files {
+        let file_diffs = get_diff_split_by_file(repo, from_commit, to_commit)?;
+        let mut files_sorted: Vec<&String> = artifacts.included_files.iter().collect();
+        files_sorted.sort();
 
-        let base_content = match repo.get_file_content(file_path, from_commit) {
-            Ok(bytes) => String::from_utf8(bytes).unwrap_or_default(),
-            Err(_) => String::new(),
-        };
-        let annotations = artifacts
-            .annotations_by_file
-            .get(file_path)
-            .cloned()
-            .unwrap_or_default();
+        for file_path in files_sorted {
+            let diff = file_diffs.get(file_path).cloned().unwrap_or_default();
 
-        files.insert(
-            file_path.clone(),
-            FileDiffJson {
-                annotations,
-                diff,
-                base_content,
-            },
-        );
+            let base_content = match repo.get_file_content(file_path, from_commit) {
+                Ok(bytes) => String::from_utf8(bytes).unwrap_or_default(),
+                Err(_) => String::new(),
+            };
+            let annotations = artifacts
+                .annotations_by_file
+                .get(file_path)
+                .cloned()
+                .unwrap_or_default();
+
+            files.insert(
+                file_path.clone(),
+                FileDiffJson {
+                    annotations,
+                    diff,
+                    base_content,
+                },
+            );
+        }
     }
 
     Ok(DiffJson {
@@ -2183,6 +2202,7 @@ pub fn get_diff_json_filtered(
         &artifacts.prompts,
         &artifacts.sessions,
         None,
+        false,
     )?;
 
     // Apply filtering if requested
@@ -2375,6 +2395,58 @@ mod tests {
         ];
         let result = parse_diff_args(&args);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_diff_args_no_files_defaults_false() {
+        let args = vec!["abc123".to_string(), "--json".to_string()];
+        let parsed = parse_diff_args(&args).unwrap();
+        assert!(!parsed.options.no_files);
+    }
+
+    #[test]
+    fn test_parse_diff_args_no_files_requires_json() {
+        let args = vec!["abc123".to_string(), "--no-files".to_string()];
+        let result = parse_diff_args(&args);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_diff_args_no_files_single_commit_json() {
+        let args = vec![
+            "abc123".to_string(),
+            "--json".to_string(),
+            "--no-files".to_string(),
+        ];
+        let parsed = parse_diff_args(&args).unwrap();
+        assert!(matches!(parsed.spec, DiffSpec::SingleCommit(_)));
+        assert!(matches!(parsed.options.format, DiffFormat::Json));
+        assert!(parsed.options.no_files);
+    }
+
+    #[test]
+    fn test_parse_diff_args_no_files_allows_ranges() {
+        let args = vec![
+            "abc123..def456".to_string(),
+            "--json".to_string(),
+            "--no-files".to_string(),
+        ];
+        let parsed = parse_diff_args(&args).unwrap();
+        assert!(matches!(parsed.spec, DiffSpec::TwoCommit(_, _)));
+        assert!(parsed.options.no_files);
+    }
+
+    #[test]
+    fn test_parse_diff_args_no_files_combines_with_include_stats() {
+        let args = vec![
+            "abc123".to_string(),
+            "--json".to_string(),
+            "--no-files".to_string(),
+            "--include-stats".to_string(),
+        ];
+        let parsed = parse_diff_args(&args).unwrap();
+        assert!(parsed.options.no_files);
+        assert!(parsed.options.include_stats);
     }
 
     #[test]

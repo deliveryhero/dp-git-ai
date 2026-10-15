@@ -1117,6 +1117,106 @@ fn test_diff_json_omits_commit_stats_without_include_stats_flag() {
 }
 
 #[test]
+fn test_diff_json_no_files_omits_files_field() {
+    let repo = TestRepo::new();
+
+    let mut file = repo.filename("no_files_omitted.txt");
+    file.set_contents(crate::lines!["base".human()]);
+    repo.stage_all_and_commit("Initial").unwrap();
+
+    file.set_contents(crate::lines!["base".human(), "ai line".ai()]);
+    let commit = repo.stage_all_and_commit("Add AI line").unwrap();
+
+    let output = repo
+        .git_ai(&["diff", &commit.commit_sha, "--json", "--no-files"])
+        .expect("git-ai diff --json --no-files should succeed");
+    let json: Value = serde_json::from_str(&output).expect("diff JSON should parse");
+
+    assert!(
+        json.get("files").is_none(),
+        "files should be omitted entirely when --no-files is provided"
+    );
+    let hunks = json["hunks"].as_array().expect("hunks should be an array");
+    assert!(
+        !hunks.is_empty(),
+        "hunks should still be populated with --no-files"
+    );
+}
+
+#[test]
+fn test_diff_json_no_files_requires_json_flag() {
+    let repo = TestRepo::new();
+
+    let mut file = repo.filename("no_files_requires_json.txt");
+    file.set_contents(crate::lines!["base".human()]);
+    repo.stage_all_and_commit("Initial").unwrap();
+
+    file.set_contents(crate::lines!["base".human(), "ai line".ai()]);
+    let commit = repo.stage_all_and_commit("Add AI line").unwrap();
+
+    let result = repo.git_ai(&["diff", &commit.commit_sha, "--no-files"]);
+    assert!(
+        result.is_err(),
+        "--no-files should be rejected without --json"
+    );
+}
+
+#[test]
+fn test_diff_json_no_files_allowed_for_commit_ranges() {
+    let repo = TestRepo::new();
+
+    let mut file = repo.filename("no_files_range.txt");
+    file.set_contents(crate::lines!["line 1".human()]);
+    let first = repo.stage_all_and_commit("Commit 1").unwrap();
+
+    file.set_contents(crate::lines!["line 1".human(), "line 2".ai()]);
+    let second = repo.stage_all_and_commit("Commit 2").unwrap();
+
+    let range = format!("{}..{}", first.commit_sha, second.commit_sha);
+    let output = repo
+        .git_ai(&["diff", &range, "--json", "--no-files"])
+        .expect("--no-files should be allowed for commit ranges");
+    let json: Value = serde_json::from_str(&output).expect("diff JSON should parse");
+
+    assert!(
+        json.get("files").is_none(),
+        "files should be omitted for commit ranges too"
+    );
+}
+
+#[test]
+fn test_diff_json_no_files_preserves_hunks_and_attribution() {
+    let repo = TestRepo::new();
+
+    let mut file = repo.filename("no_files_hunks_parity.txt");
+    file.set_contents(crate::lines!["base".human()]);
+    repo.stage_all_and_commit("Initial").unwrap();
+
+    file.set_contents(crate::lines!["base".human(), "ai line".ai()]);
+    let commit = repo.stage_all_and_commit("Add AI line").unwrap();
+
+    let with_files = repo
+        .git_ai(&["diff", &commit.commit_sha, "--json"])
+        .expect("git-ai diff --json should succeed");
+    let without_files = repo
+        .git_ai(&["diff", &commit.commit_sha, "--json", "--no-files"])
+        .expect("git-ai diff --json --no-files should succeed");
+
+    let with_files_json: Value = serde_json::from_str(&with_files).expect("diff JSON should parse");
+    let without_files_json: Value =
+        serde_json::from_str(&without_files).expect("diff JSON should parse");
+
+    assert_eq!(
+        with_files_json["hunks"], without_files_json["hunks"],
+        "--no-files must not change hunks content or attribution"
+    );
+    assert_eq!(
+        with_files_json["commits"], without_files_json["commits"],
+        "--no-files must not change commit metadata"
+    );
+}
+
+#[test]
 fn test_diff_json_all_prompts_includes_non_landing_prompts() {
     let repo = TestRepo::new();
 

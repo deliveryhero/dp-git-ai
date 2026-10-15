@@ -345,6 +345,9 @@ fn print_help() {
     eprintln!(
         "    --all-prompts          Include all prompts from commit note in JSON output (single commit only)"
     );
+    eprintln!(
+        "    --no-files             Omit per-file diff/base_content/annotations from JSON output"
+    );
     eprintln!("  stats [commit]     Show AI authorship statistics for a commit");
     eprintln!("    --json                 Output in JSON format");
     eprintln!("  usage              Show local AI usage statistics");

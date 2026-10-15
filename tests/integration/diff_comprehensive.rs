@@ -104,6 +104,40 @@ fn test_diff_json_file_structure() {
 }
 
 #[test]
+fn test_diff_json_no_files_structure() {
+    let repo = TestRepo::new();
+
+    // Create commit with AI changes
+    let mut file = repo.filename("no_files_struct.ts");
+    file.set_contents(crate::lines!["const x = 1;".human()]);
+    repo.stage_all_and_commit("Initial").unwrap();
+
+    file.set_contents(crate::lines!["const x = 2;".ai()]);
+    let commit = repo.stage_all_and_commit("Update x").unwrap();
+
+    // Run diff with --json --no-files
+    let output = repo
+        .git_ai(&["diff", &commit.commit_sha, "--json", "--no-files"])
+        .expect("diff --json --no-files should succeed");
+
+    let json: Value = serde_json::from_str(&output).expect("Should be valid JSON");
+
+    assert!(
+        json.get("files").is_none(),
+        "files should be absent from the JSON output entirely, not just empty"
+    );
+    assert!(
+        json.get("hunks").is_some(),
+        "hunks should still be present with --no-files"
+    );
+    assert!(json["hunks"].is_array(), "hunks should be an array");
+    assert!(
+        !json["hunks"].as_array().unwrap().is_empty(),
+        "hunks should still be populated with --no-files"
+    );
+}
+
+#[test]
 fn test_diff_json_annotations_format() {
     let repo = TestRepo::new();
 
